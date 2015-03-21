@@ -1,5 +1,6 @@
 #include "WPILib.h"
 #include "Math.h"
+
 //#include "PowerDistributionPanel.h"
 //#include "WPILib.*"
 
@@ -26,8 +27,6 @@ class Robot: public SampleRobot
     Talon liftTalon; //talon on PWM 5
     Talon rightToteTalon;//talon on PWM 4
     Talon leftToteTalon;//talon on PWM 6
-    //Talon rightToteTalon; //talon on PWM 4
-    //Talon leftToteTalon; //talon on PWM 6
 
 	//Joystick
 	Joystick stick1;			// driver joystick
@@ -92,6 +91,7 @@ public:
 		liftEncoder.Reset();
 		bool liftTote = false;
 		bool lowerTote = false;
+		bool toteButtonPushed =  false;
 		int oldEncoderVal = liftEncoder.Get()*18/25;
 		int numberOfTotes = 0; //accounts for totes and trash cans
 		int currentEncoderVal = liftEncoder.Get()*18/25;
@@ -129,15 +129,20 @@ public:
 			trashSolenoid.Set(trashToggle);
 
 			//Drive the tote pull in talons
-			if(stick2.GetRawButton(7))
+			if(stick2.GetRawButton(6))
 			{
 				rightToteTalon.Set(1);//totes sucking in (I guess)
 				leftToteTalon.Set(-1);
 			}
-			if(stick2.GetRawButton(6))
+			else if(stick2.GetRawButton(7))
 			{
 				rightToteTalon.Set(-1);//totes sucking in (I guess)
 				leftToteTalon.Set(1);
+			}
+			else
+			{
+				rightToteTalon.Set(0);//totes sucking in (I guess)
+				leftToteTalon.Set(0);
 			}
 
 			//Automatically move one crate height
@@ -151,35 +156,45 @@ public:
 			{
 				liftTote = true;
 				numberOfTotes++;
+				toteButtonPushed = true;
 			}
-			if(stick2.GetRawButton(10) && !liftTote && !lowerTote && numberOfTotes > 0)
+			else if(stick2.GetRawButton(10) && !liftTote && !lowerTote && numberOfTotes > 0)
 			{
 				lowerTote = true;
 				numberOfTotes--;
+				toteButtonPushed = true;
+			}
+			else
+			{
+				toteButtonPushed = false;
 			}
 
 			//Driving the tote lifter and acknowledging limits
-			switch(numberOfTotes)
+			if(toteButtonPushed)
 			{
-				case 0:
-					distanceToMove = 10; //change to trashcanheight
-					break;
-				case 5:
-					distanceToMove = 10; //change to 1.5 inches
-					break;
-				default:
-					distanceToMove = 1060;
-					break;
+				switch(numberOfTotes)
+				{
+					case 0:
+						distanceToMove = 10; //change to trashcanheight
+						break;
+					case 5:
+						distanceToMove = 10; //change to 1.5 inches
+						break;
+					default:
+						distanceToMove = 1060;
+						break;
+				}
 			}
 
 			if(!maxHeight.Get() && liftTote && (abs(currentEncoderVal- oldEncoderVal)< distanceToMove) )//1060 is the distance of one tote movement, maxheight limits the motion of the lift motor.
 			{
 				liftTalon.Set(1);
+				lowerTote = false;
 			}
 			else if(!maxHeight.Get() && lowerTote && (abs(currentEncoderVal- oldEncoderVal)< distanceToMove) )//1060 is the distance of one tote movement
 			{
 				liftTalon.Set(-1);
-				numberOfTotes--;
+				liftTote = false;
 			}
 			else
 			{
@@ -215,6 +230,10 @@ public:
 			SmartDashboard::PutNumber("Encoder stuff", (-liftEncoder.Get())*18/25); // 18/25 = 360/500 this converts the encoder count to degrees (360 degrees = 500 count)
 			SmartDashboard::PutNumber("Encoder stuff2", (-liftEncoder.Get())*18/25); // 18/25 = 360/500 this converts the encoder count to degrees (360 degrees = 500 count)
 			SmartDashboard::PutNumber("Joystick2 stuff", -stick2.GetY()+1);
+
+			//CameraServer::GetInstance()->SetQuality(50);
+			//the camera name (ex "cam0") can be found through the roborio web interface
+			//CameraServer::GetInstance()->StartAutomaticCapture("cam0");
 
 			Wait(0.005); // wait 5ms to avoid hogging CPU cycles
 		}
