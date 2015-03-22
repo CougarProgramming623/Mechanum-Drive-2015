@@ -125,7 +125,7 @@ public:
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Buttons that Control the Solenoids for trash and arms
-			toteToggle = stick2.GetRawButton(3);
+			toteToggle = stick2.GetRawButton(1);
 			toteSolenoid.Set(toteToggle);
 			//trash Toggle
 			trashToggle = !stick2.GetRawButton(2);
@@ -136,12 +136,12 @@ public:
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Buttons that Control the Arms Pulling or Pushing
-			if(stick2.GetRawButton(6))
+			if(stick2.GetRawButton(3))
 			{
 				rightToteTalon.Set(1);//totes sucking in (I guess)
 				leftToteTalon.Set(-1);
 			}
-			else if(stick2.GetRawButton(7))
+			else if(stick2.GetRawButton(4))
 			{
 				rightToteTalon.Set(-1);//totes sucking in (I guess)
 				leftToteTalon.Set(1);
@@ -154,7 +154,7 @@ public:
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Buttons that Control the Lift Motor
-			if(stick2.GetRawButton(8) && !releaseButton)//lower to 4000 and drop the trash can at the end
+			if(stick2.GetRawButton(5) && !releaseButton)//lower to 4000 and drop the trash can at the end
 			{
 				numberOfTotes = 0;
 				releaseButton = true;
@@ -163,13 +163,13 @@ public:
 				else if (releaseTotes == 1)//lower till it stops
 					releaseTotes = 2;
 			}
-			else if(stick2.GetRawButton(11) && !lowerTote && !liftTote && !releaseTotes && numberOfTotes < 5 && !maxHeight.Get())//Move Upward a Step
+			else if(stick2.GetRawButton(8) && !lowerTote && !liftTote && !releaseTotes && numberOfTotes < 5 && !maxHeight.Get())//Move Upward a Step
 			{
 				liftTote = true;
 				numberOfTotes++;
 				toteButtonPushed = true;
 			}
-			else if(stick2.GetRawButton(10) && !liftTote && !lowerTote && !releaseTotes && numberOfTotes > 0 && !minHeight.Get())//Move Downward a Step
+			else if(stick2.GetRawButton(9) && !liftTote && !lowerTote && !releaseTotes && numberOfTotes > 0 && !minHeight.Get())//Move Downward a Step
 			{
 				lowerTote = true;
 				numberOfTotes--;
@@ -248,11 +248,18 @@ public:
 
 					//manual control of the liftMotor
 					if(!maxHeight.Get() && !minHeight.Get()) //maxHeight is not tiggered move whatever
-						liftTalon.Set(-stick2.GetY());
-					else if (maxHeight.Get() && -stick2.GetY() < 0) //maxHeight is triggered so the motor can only run downwards
-						liftTalon.Set(-stick2.GetY());
-					else if (minHeight.Get() && -stick2.GetY() > 0)
-						liftTalon.Set(-stick2.GetY());
+					{
+						if(stick2.GetRawButton(7)) //motor runs downwards
+							liftTalon.Set(-1);
+						else if(stick2.GetRawButton(6)) //motor runs upwards
+							liftTalon.Set(1);
+						else
+							liftTalon.Set(0);
+					}
+					else if (maxHeight.Get() && stick2.GetRawButton(7)) //maxHeight is triggered so the motor can only run downwards
+						liftTalon.Set(-1);
+					else if (minHeight.Get() && stick2.GetRawButton(6))
+						liftTalon.Set(1);
 					else
 						liftTalon.Set(0);
 				}
@@ -285,7 +292,6 @@ public:
 			SmartDashboard::PutBoolean ("switchMaxHeight", maxHeight.Get()); //remove
 			SmartDashboard::PutNumber("Encoder stuff", (-liftEncoder.Get())*18/25); // 18/25 = 360/500 this converts the encoder count to degrees (360 degrees = 500 count)
 			SmartDashboard::PutNumber("Encoder graph", (-liftEncoder.Get())*18/25); // 18/25 = 360/500 this converts the encoder count to degrees (360 degrees = 500 count)
-			SmartDashboard::PutNumber("Joystick2 stuff", -stick2.GetY()+1);
 			SmartDashboard::PutNumber("Lift Talon", liftTalon.Get());
 			SmartDashboard::PutNumber("NumberOfTotes", (numberOfTotes));
 			SmartDashboard::PutNumber("DistanceToMoveTo", (distanceToMove));
