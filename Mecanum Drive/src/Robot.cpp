@@ -61,6 +61,10 @@ public:
 		robotDrive.SetExpiration(0.1);
 		robotDrive.SetInvertedMotor(RobotDrive::kFrontRightMotor, true);	// invert the left side motors
 		robotDrive.SetInvertedMotor(RobotDrive::kRearRightMotor, true);	// you may need to change or remove this to match your robot
+		CameraServer::GetInstance()->SetQuality(50);
+		//the camera name (ex "cam0") can be found through the roborio web interface
+		CameraServer::GetInstance()->StartAutomaticCapture("cam0");
+		DriverStation::ReportError("Camera works haha");
 		//Camera Stuff
 		/*frame = imaqCreateImage(IMAQ_IMAGE_RGB, 0);
 				//the camera name (ex "cam0") can be found through the roborio web interface
@@ -83,6 +87,7 @@ public:
 		//int encoderCount = liftEncoder.Get();
 		//double distance = 0; //use diameter and M_PI
 	}//runs in mechanum
+
 	void OperatorControl()
 	{
 		//IMAQdxStartAcquisition(session);
@@ -98,6 +103,7 @@ public:
 		int numberOfTotes = 0; //accounts for totes and trash cans
 		int currentEncoderVal = (-liftEncoder.Get())*18/25;
 		int distanceToMove = 0;
+		//CameraServer::GetInstance()->StartAutomaticCapture("cam0");
 		while (IsOperatorControl() && IsEnabled())
 		{
         	// Use the joystick X axis for lateral movement, Y axis for forward movement, and Z axis for rotation.
@@ -125,7 +131,7 @@ public:
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Buttons that Control the Solenoids for trash and arms
-			toteToggle = stick2.GetRawButton(1);
+			toteToggle = !stick2.GetRawButton(1);
 			toteSolenoid.Set(toteToggle);
 			//trash Toggle
 			trashToggle = !stick2.GetRawButton(2);
@@ -168,6 +174,7 @@ public:
 				liftTote = true;
 				numberOfTotes++;
 				toteButtonPushed = true;
+
 			}
 			else if(stick2.GetRawButton(9) && !liftTote && !lowerTote && !releaseTotes && numberOfTotes > 0 && !minHeight.Get())//Move Downward a Step
 			{
@@ -213,7 +220,8 @@ public:
 			if (releaseTotes == 1 && releaseButton)
 			{
 				liftTalon.Set(-1);
-				if(currentEncoderVal < 4000) //change to trashcan Height
+				toteSolenoid.Set(false);
+				if(currentEncoderVal < 3900) //change to trashcan Height
 				{
 					trashSolenoid.Set(false);
 					releaseButton = false;
@@ -222,6 +230,8 @@ public:
 			else if(releaseTotes == 2 && releaseButton)
 			{
 				liftTalon.Set(-1);
+				toteSolenoid.Set(false);
+				trashSolenoid.Set(false);
 				if(minHeight.Get())
 				{
 					releaseButton = false;
@@ -234,11 +244,13 @@ public:
 				if(!maxHeight.Get() && liftTote && (currentEncoderVal < distanceToMove) )//1060 is the distance of one tote movement, maxheight limits the motion of the lift motor.
 				{
 					liftTalon.Set(1);
+					toteSolenoid.Set(false);
 					lowerTote = false;
 				}
 				else if(!minHeight.Get() && lowerTote && currentEncoderVal > distanceToMove )//1060 is the distance of one tote movement
 				{
 					liftTalon.Set(-1);
+					toteSolenoid.Set(false);
 					liftTote = false;
 				}
 				else
@@ -283,6 +295,16 @@ public:
 				liftEncoder.Reset();
 				numberOfTotes = 0;
 			}
+
+			//-----------------------------------------------------------------------------------------------------------
+			//DriveJoystickLEDs
+
+			for(int ii = 0; ii <= numberOfTotes + 1; ii++)
+				stick2.SetOutput(ii,true);
+
+			for(int kk = numberOfTotes+1; kk <= 6; kk++)
+				stick2.SetOutput(kk,false);
+
 			//-----------------------------------------------------------------------------------------------------------
 			//SmartDashboardThings
 			SmartDashboard::PutNumber("currentEV", (currentEncoderVal));
@@ -295,10 +317,6 @@ public:
 			SmartDashboard::PutNumber("Lift Talon", liftTalon.Get());
 			SmartDashboard::PutNumber("NumberOfTotes", (numberOfTotes));
 			SmartDashboard::PutNumber("DistanceToMoveTo", (distanceToMove));
-
-			//CameraServer::GetInstance()->SetQuality(50);
-			//the camera name (ex "cam0") can be found through the roborio web interface
-			//CameraServer::GetInstance()->StartAutomaticCapture("cam0");
 
 			Wait(0.005); // wait 5ms to avoid hogging CPU cycles
 		}
