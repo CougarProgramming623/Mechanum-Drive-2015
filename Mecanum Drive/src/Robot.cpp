@@ -1,4 +1,6 @@
 #include "WPILib.h"
+#include "Timer.h"
+#include <time.h>
 #include "Math.h"
 
 //#include "PowerDistributionPanel.h"
@@ -49,6 +51,9 @@ class Robot: public SampleRobot
 	//From PDP
 	double voltage;		    //input voltage to the PDP
 	double current;			//current draw on the PDP
+	bool ResetEncoder = false;
+	float matchTime;
+	int offset = 50;
 public:
 	Robot ():
 			robotDrive(frontLeftChannel, rearLeftChannel, frontRightChannel, rearRightChannel),           //robot drive talons
@@ -64,30 +69,91 @@ public:
 		CameraServer::GetInstance()->SetQuality(50);
 		//the camera name (ex "cam0") can be found through the roborio web interface
 		CameraServer::GetInstance()->StartAutomaticCapture("cam0");
-		DriverStation::ReportError("Camera works haha");
-		//Camera Stuff
-		/*frame = imaqCreateImage(IMAQ_IMAGE_RGB, 0);
-				//the camera name (ex "cam0") can be found through the roborio web interface
-				imaqError = IMAQdxOpenCamera("cam0", IMAQdxCameraControlModeController, &session);
-				if(imaqError != IMAQdxErrorSuccess) {
-					DriverStation::ReportError("IMAQdxOpenCamera error: " + std::to_string((long)imaqError) + "\n");
-				}
-				imaqError = IMAQdxConfigureGrab(session);
-				if(imaqError != IMAQdxErrorSuccess) {
-					DriverStation::ReportError("IMAQdxConfigureGrab error: " + std::to_string((long)imaqError) + "\n");
-				}*/
-		//End Camera Stuff
-		while(false)
-		{
-			//run a motor until the limit switch triggers
-			//liftEncoder.reset();
-		}
+		DriverStation::ReportError("Camera Operation");
 		liftEncoder.Reset();//remove when the above lines work
-		//liftEncdoer.Start(); //not necessary
-		//int encoderCount = liftEncoder.Get();
 		//double distance = 0; //use diameter and M_PI
 	}//runs in mechanum
-
+	//-----------------------------------------------------------------------------------------------------------------------------------------------------
+	//AutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomousAutonomous
+	//-----------------------------------------------------------------------------------------------------------------------------------------------------
+	void Autonomous(void)
+	{
+		//time_t start = time(0);
+		float startTime = Timer::GetFPGATimestamp();
+		while(RobotBase::IsAutonomous())
+		{
+			matchTime = (Timer::GetFPGATimestamp() -startTime);
+			DriverStation::ReportError(std::to_string(matchTime) + "\n");
+			if(minHeight.Get())
+			{
+				liftTalon.Set(0);
+				liftEncoder.Reset();
+			}
+			//RMV is Inverted
+			//Clockwise = (1,1)
+			//Forward = (1,-1)
+			//Backward = (-1,1)
+			//CounterClockWise = (-1,-1)
+			if(DigitalInput(0).Get() == 0)//DIO thing is turned to 0)//drive forward and stop
+			{
+				DriverStation::ReportError("CCW: ");
+				toteSolenoid.Set(false);if(-liftEncoder.Get()*18/25 < 300 && matchTime > 3.5 && matchTime < 8)
+				{
+					liftTalon.Set(1);
+				}
+				else
+					liftTalon.Set(0);
+				if(matchTime < 4)//GRAB TRASH
+					trashSolenoid.Set(true);
+				else if(matchTime < 5.5)//Run Backwards
+					robotDrive.SetLeftRightMotorOutputs(-0.55, 0.4);
+				else if(matchTime < 6.8)//Stop Driving
+					robotDrive.SetLeftRightMotorOutputs(-0.3, -0.3);//COUNTER CLOCKWISE
+				else
+				{
+					toteSolenoid.Set(false);
+					robotDrive.SetLeftRightMotorOutputs(0.0, 0.0);
+					if(-liftEncoder.Get()*18/25 > 0 && !minHeight.Get())
+						liftTalon.Set (-1);
+					else
+						liftTalon.Set (0);
+				}
+			}
+			else if(DigitalInput(1).Get() == 0)//DIO thing turned to 1)//DRIVE WITH A TRASH CAN AND TURN CCW
+			{
+				toteSolenoid.Set(false);
+				DriverStation::ReportError("CW: ");
+				if(-liftEncoder.Get()*18/25 < 300 && matchTime > 3.5 && matchTime < 8)
+				{
+					liftTalon.Set(1);
+				}
+				else
+					liftTalon.Set(0);
+				if(matchTime < 4)//GRAB TRASH
+					trashSolenoid.Set(true);
+				else if(matchTime < 5.5)//Run Backwards
+					robotDrive.SetLeftRightMotorOutputs(-0.55, 0.4);
+				else if(matchTime < 7.1)//Stop Driving
+					robotDrive.SetLeftRightMotorOutputs(0.3, 0.3);//CLOCKWISE
+				else
+				{
+					toteSolenoid.Set(false);
+					robotDrive.SetLeftRightMotorOutputs(0.0, 0.0);
+					if(-liftEncoder.Get()*18/25 > 0 && !minHeight.Get())
+						liftTalon.Set (-1);
+					else
+						liftTalon.Set (0);
+				}
+			}
+			else
+			{
+				DriverStation::ReportError("NOTHING: ");
+			}
+		}
+	}
+	//-----------------------------------------------------------------------------------------------------------------------------------------------------
+	//TeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleopTeleop
+	//-----------------------------------------------------------------------------------------------------------------------------------------------------
 	void OperatorControl()
 	{
 		//IMAQdxStartAcquisition(session);
@@ -103,39 +169,23 @@ public:
 		int numberOfTotes = 0; //accounts for totes and trash cans
 		int currentEncoderVal = (-liftEncoder.Get())*18/25;
 		int distanceToMove = 0;
-		//CameraServer::GetInstance()->StartAutomaticCapture("cam0");
 		while (IsOperatorControl() && IsEnabled())
 		{
         	// Use the joystick X axis for lateral movement, Y axis for forward movement, and Z axis for rotation.
         	// This sample does not use field-oriented drive, so the gyro input is set to zero.
-			robotDrive.MecanumDrive_Cartesian(stick1.GetX(), stick1.GetY(), stick1.GetZ()*.5);
-			/*
-			//Camera Stuff
-			// acquire images
-			//IMAQdxStartAcquisition(session);
-			// grab an image, draw the circle, and provide it for the camera server which will
-			// in turn send it to the dashboard.
-				IMAQdxGrab(session, frame, true, NULL);
-				if(imaqError != IMAQdxErrorSuccess) {
-					DriverStation::ReportError("IMAQdxGrab error: " + std::to_string((long)imaqError) + "\n");
-				}
-				else {
-					imaqDrawShapeOnImage(frame, frame, { 10, 10, 100, 100 }, DrawMode::IMAQ_DRAW_VALUE, ShapeMode::IMAQ_SHAPE_OVAL, 0.0f);
-				CameraServer::GetInstance()->SetImage(frame);
-				}
-				Wait(0.005);				// wait for a motor update time
-			}
-			// stop image acquisition
-			IMAQdxStopAcquisition(session);
-			*/
+			//-----------------------------------------------------------------------------------------------------------
+			//MechanumDrive
+			if(stick1.GetRawButton(1))
+				robotDrive.MecanumDrive_Cartesian(stick1.GetX(), stick1.GetY(), stick1.GetZ()*.5);
+			else
+				robotDrive.MecanumDrive_Cartesian(stick1.GetX()*.5, stick1.GetY()*.5, stick1.GetZ()*.2);
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Buttons that Control the Solenoids for trash and arms
 			toteToggle = !stick2.GetRawButton(1);
-			toteSolenoid.Set(toteToggle);
+
 			//trash Toggle
 			trashToggle = !stick2.GetRawButton(2);
-			trashSolenoid.Set(trashToggle);
 
 			///Encoder Distance
 			currentEncoderVal = (-liftEncoder.Get())*18/25;
@@ -195,19 +245,19 @@ public:
 						distanceToMove = 0;
 						break;
 					case 1:
-						distanceToMove = 1100;
+						distanceToMove = 1100 + offset;
 						break;
 					case 2:
-						distanceToMove = 2190;
+						distanceToMove = 2190 + offset;
 						break;
 					case 3:
-						distanceToMove = 3280;
+						distanceToMove = 3280 + offset;
 						break;
 					case 4:
-						distanceToMove = 4360;
+						distanceToMove = 4360 + offset;
 						break;
 					case 5:
-						distanceToMove = 4650; //change to 1.5 inches
+						distanceToMove = 4650 + offset; //change to 1.5 inches
 						break;
 					default:
 						distanceToMove = 1060*numberOfTotes;
@@ -217,21 +267,27 @@ public:
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Code to run the liftTalon to the position of the next Tote spot
+			if (stick2.GetRawButton(7) || stick2.GetRawButton(6))
+			{
+				liftTote = false;
+				lowerTote = false;
+				releaseTotes == false;
+			}
 			if (releaseTotes == 1 && releaseButton)
 			{
 				liftTalon.Set(-1);
-				toteSolenoid.Set(false);
-				if(currentEncoderVal < 3900) //change to trashcan Height
+				toteToggle = false;
+				if(currentEncoderVal < 4100) //change to trashcan Height
 				{
-					trashSolenoid.Set(false);
+					trashToggle = false;
 					releaseButton = false;
 				}
 			}
 			else if(releaseTotes == 2 && releaseButton)
 			{
 				liftTalon.Set(-1);
-				toteSolenoid.Set(false);
-				trashSolenoid.Set(false);
+				toteToggle = false;
+				trashToggle = false;
 				if(minHeight.Get())
 				{
 					releaseButton = false;
@@ -241,16 +297,17 @@ public:
 			}
 			else
 			{
+
 				if(!maxHeight.Get() && liftTote && (currentEncoderVal < distanceToMove) )//1060 is the distance of one tote movement, maxheight limits the motion of the lift motor.
 				{
 					liftTalon.Set(1);
-					toteSolenoid.Set(false);
+					toteToggle = false;
 					lowerTote = false;
 				}
 				else if(!minHeight.Get() && lowerTote && currentEncoderVal > distanceToMove )//1060 is the distance of one tote movement
 				{
 					liftTalon.Set(-1);
-					toteSolenoid.Set(false);
+					toteToggle = false;
 					liftTote = false;
 				}
 				else
@@ -262,14 +319,26 @@ public:
 					if(!maxHeight.Get() && !minHeight.Get()) //maxHeight is not tiggered move whatever
 					{
 						if(stick2.GetRawButton(7)) //motor runs downwards
-							liftTalon.Set(-1);
+						{
+							if(currentEncoderVal > 1000)
+								liftTalon.Set(-1);
+							else
+								liftTalon.Set(-.5);
+						}
 						else if(stick2.GetRawButton(6)) //motor runs upwards
+						{
 							liftTalon.Set(1);
+						}
 						else
 							liftTalon.Set(0);
 					}
 					else if (maxHeight.Get() && stick2.GetRawButton(7)) //maxHeight is triggered so the motor can only run downwards
-						liftTalon.Set(-1);
+					{
+						if(currentEncoderVal > 1000)
+							liftTalon.Set(-1);
+						else
+							liftTalon.Set(-.5);
+					}
 					else if (minHeight.Get() && stick2.GetRawButton(6))
 						liftTalon.Set(1);
 					else
@@ -304,6 +373,11 @@ public:
 
 			for(int kk = numberOfTotes+1; kk <= 6; kk++)
 				stick2.SetOutput(kk,false);
+			//-----------------------------------------------------------------------------------------------------------
+			//Set the solenoids only once
+
+			toteSolenoid.Set(toteToggle);
+			trashSolenoid.Set(trashToggle);
 
 			//-----------------------------------------------------------------------------------------------------------
 			//SmartDashboardThings
