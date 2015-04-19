@@ -174,11 +174,13 @@ public:
 		bool lowerTote        =false;
 		bool toteButtonPushed =false;
 		bool releaseButton    =false;
+		bool started          =false;
 		int releaseTotes      = 0;
 		int numberOfTotes     = 0; //accounts for totes and trash cans
 		int currentEncoderVal = (-liftEncoder.Get())*(3.666); // 18/25 * 26.9/71     .2728    3.666
 		int distanceToMove    = 0; //Current Target for the Encoder motor to reach
 		int rangeToWall       = 0;
+		float startTime;
 
 		preTrashSolenoid.Set(true);
 
@@ -232,7 +234,7 @@ public:
 				else if (releaseTotes == 1)//lower till it stops
 					releaseTotes = 2;
 			}
-			else if(stick2.GetRawButton(8) && !lowerTote && !liftTote && !releaseTotes && numberOfTotes < 5)//Move Upward a Step
+			else if(stick2.GetRawButton(8) && !lowerTote && !liftTote && !releaseTotes && numberOfTotes < 6)//Move Upward a Step
 			{
 				liftTote = true;
 				numberOfTotes++;
@@ -340,9 +342,9 @@ public:
 						else if(stick2.GetRawButton(6)) //motor runs upwards
 						{
 							if(currentEncoderVal > 9500)
-								liftTalon.Set(.5);
+								liftTalon.Set(.5 + baseMotorValue);
 							else
-								liftTalon.Set(.7);
+								liftTalon.Set(.7 + baseMotorValue);
 						}
 						else
 							liftTalon.Set(0);
@@ -355,7 +357,7 @@ public:
 							liftTalon.Set(-.3);
 					}
 					else if (minHeight.Get() && stick2.GetRawButton(6))
-						liftTalon.Set(.5);
+						liftTalon.Set(.5 + baseMotorValue);
 					else
 						liftTalon.Set(0);
 				}
@@ -382,11 +384,23 @@ public:
 			//TrashTalon Code
 			if(currentEncoderVal < 500)//Change from 1000
 			{
-				garbageTalon.Set(1);
+				if(!started)//puts down the trash can arms
+				{
+					startTime = Timer::GetFPGATimestamp();//reference point in time
+					started = true;
+				}
+
+				if(Timer::GetFPGATimestamp() - startTime < 1.5)//elapsed time cannot exceed 1.5 seconds
+					garbageTalon.Set(1);//DOWN
+				else//stops the motor to prevent selfdestruct
+				{
+					garbageTalon.Set(0);
+				}
 			}
 			else
 			{
-				garbageTalon.Set(-.6);
+				started = false;//in case the motor reverses direction based on the encoder
+				garbageTalon.Set(-.6);//UP
 			}
 
 			//-----------------------------------------------------------------------------------------------------------
@@ -423,6 +437,7 @@ public:
 			SmartDashboard::PutNumber("Lift Talon", liftTalon.Get());
 			SmartDashboard::PutNumber("NumberOfTotes", (numberOfTotes));
 			SmartDashboard::PutNumber("DistanceToMoveTo", (distanceToMove));
+			SmartDashboard::PutNumber("TimerCheckThing", Timer::GetFPGATimestamp() - startTime);
 
 			Wait(0.005); // wait 5ms to avoid hogging CPU cycles
 		}
