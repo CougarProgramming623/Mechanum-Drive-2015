@@ -12,54 +12,61 @@
 class Robot: public SampleRobot
 {
     // Channels for the wheels
-    const static int frontLeftChannel	= 1;
-    const static int rearLeftChannel	= 0;
-    const static int frontRightChannel	= 3;
-    const static int rearRightChannel	= 2;
-    const static int joystick1Channel	= 0;
-    const static int joystick2Channel	= 1;
-    const static int liftMotorChannel   = 5;
-    const static int rightToteChannel   = 4;
-    const static int leftToteChannel    = 6;
+    const static int frontLeftChannel	 = 1;
+    const static int rearLeftChannel	 = 0;
+    const static int frontRightChannel	 = 3;
+    const static int rearRightChannel	 = 2;
+    const static int joystick1Channel	 = 0;
+    const static int joystick2Channel	 = 1;
+    const static int liftMotorChannel    = 5;
+    const static int toteChannel         = 4;
+    const static int garbageChannel      = 6;
 
     //Robot
     RobotDrive robotDrive;	// robot drive system
 
     //Talons
-    Talon liftTalon; //talon on PWM 5
-    Talon rightToteTalon;//talon on PWM 4
-    Talon leftToteTalon;//talon on PWM 6
+    Talon liftTalon;            //talon on PWM 5
+    Talon ToteTalon;            //talon on PWM 4
+    Talon garbageTalon;         //talon on PWM 6
 
 	//Joystick
 	Joystick stick1;			// driver joystick
 	Joystick stick2;			//encoder joystick using buttons 2,3,6,7,9,10,11
+	Joystick stick3;
 
 
 	//Solenoids and Compressor
-	Solenoid toteSolenoid;            // CAN 0 Port 1
+	Solenoid toteSolenoid;            //CAN 0 Port 1
 	Solenoid trashSolenoid;           //CAN 0 Port 0
+	Solenoid preTrashSolenoid;        //CAN 0 Port 2
 	bool toteToggle = true;
 	bool trashToggle = true;
 
 	//Encoder
 	Encoder liftEncoder;
 
+	//Ultrasound
+	Ultrasonic wallDistance;
+
 	//Limit Switches
-	DigitalInput maxHeight;
 	DigitalInput minHeight;
-	DigitalInput toteInPlace;
+
+	//Lights
+	DigitalOutput sonarLight;
+
 	//From PDP
 	double voltage;		    //input voltage to the PDP
 	double current;			//current draw on the PDP
 	bool ResetEncoder = false;
 	float matchTime;
-	int offset = 50;
+	int offset = -60;
 public:
 	Robot ():
 			robotDrive(frontLeftChannel, rearLeftChannel, frontRightChannel, rearRightChannel),           //robot drive talons
-			liftTalon(liftMotorChannel), rightToteTalon(rightToteChannel), leftToteTalon(leftToteChannel),//Other talons
-			stick1(joystick1Channel),stick2(joystick2Channel), toteSolenoid(0,1), trashSolenoid(0,0),     //sticks and solenoids
-			liftEncoder(8,9,true, Encoder::k4X), maxHeight(7), minHeight(6), toteInPlace(5)             //encoders and limit switches
+			liftTalon(liftMotorChannel), ToteTalon(toteChannel), garbageTalon(garbageChannel),//Other talons
+			stick1(joystick1Channel),stick2(joystick2Channel), stick3(3), toteSolenoid(0,1), trashSolenoid(0,0), preTrashSolenoid(0,2),    //sticks and solenoids
+			liftEncoder(8,9,true, Encoder::k4X),wallDistance(3,4), minHeight(6), sonarLight(5)   //encoders and limit switches
 
 		//initiated in the same order as they are declared above
 	{
@@ -70,7 +77,7 @@ public:
 		//the camera name (ex "cam0") can be found through the roborio web interface
 		CameraServer::GetInstance()->StartAutomaticCapture("cam0");
 		DriverStation::ReportError("Camera Operation");
-		liftEncoder.Reset();//remove when the above lines work
+		wallDistance.SetAutomaticMode(true);
 		//double distance = 0; //use diameter and M_PI
 	}//runs in mechanum
 	//-----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -80,6 +87,7 @@ public:
 	{
 		//time_t start = time(0);
 		float startTime = Timer::GetFPGATimestamp();
+		preTrashSolenoid.Set(true);
 		while(RobotBase::IsAutonomous())
 		{
 			matchTime = (Timer::GetFPGATimestamp() -startTime);
@@ -97,7 +105,8 @@ public:
 			if(DigitalInput(0).Get() == 0)//DIO thing is turned to 0)//drive forward and stop
 			{
 				DriverStation::ReportError("CCW: ");
-				toteSolenoid.Set(false);if(-liftEncoder.Get()*18/25 < 300 && matchTime > 3.5 && matchTime < 8)
+				toteSolenoid.Set(false);
+				if(-liftEncoder.Get()*18/25 < 300 && matchTime > 3.5 && matchTime < 8)
 				{
 					liftTalon.Set(1);
 				}
@@ -159,16 +168,20 @@ public:
 		//IMAQdxStartAcquisition(session);
 		robotDrive.SetSafetyEnabled(false);
 		SmartDashboard::init();
-		liftEncoder.Reset();
+
 		double baseMotorValue = 0.0;
-		bool liftTote = false;
-		bool lowerTote = false;
-		bool toteButtonPushed =  false;
-		bool releaseButton = false;
-		int releaseTotes = 0;
-		int numberOfTotes = 0; //accounts for totes and trash cans
-		int currentEncoderVal = (-liftEncoder.Get())*18/25;
-		int distanceToMove = 0;
+		bool liftTote         =false;
+		bool lowerTote        =false;
+		bool toteButtonPushed =false;
+		bool releaseButton    =false;
+		int releaseTotes      = 0;
+		int numberOfTotes     = 0; //accounts for totes and trash cans
+		int currentEncoderVal = (-liftEncoder.Get())*(3.666); // 18/25 * 26.9/71     .2728    3.666
+		int distanceToMove    = 0; //Current Target for the Encoder motor to reach
+		int rangeToWall       = 0;
+
+		preTrashSolenoid.Set(true);
+
 		while (IsOperatorControl() && IsEnabled())
 		{
         	// Use the joystick X axis for lateral movement, Y axis for forward movement, and Z axis for rotation.
@@ -188,24 +201,24 @@ public:
 			trashToggle = !stick2.GetRawButton(2);
 
 			///Encoder Distance
-			currentEncoderVal = (-liftEncoder.Get())*18/25;
+			currentEncoderVal = (-liftEncoder.Get())*(3.666);
+
+			//Ultrasonic Distance To Wall
+			rangeToWall = wallDistance.GetRangeInches();
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Buttons that Control the Arms Pulling or Pushing
 			if(stick2.GetRawButton(3))
 			{
-				rightToteTalon.Set(1);//totes sucking in (I guess)
-				leftToteTalon.Set(-1);
+				ToteTalon.Set(1);//totes sucking in (I guess)
 			}
 			else if(stick2.GetRawButton(4))
 			{
-				rightToteTalon.Set(-1);//totes sucking in (I guess)
-				leftToteTalon.Set(1);
+				ToteTalon.Set(-1);//totes sucking in (I guess)
 			}
 			else
 			{
-				rightToteTalon.Set(0);//totes sucking in (I guess)
-				leftToteTalon.Set(0);
+				ToteTalon.Set(0);//totes sucking in (I guess)
 			}
 
 			//-----------------------------------------------------------------------------------------------------------
@@ -219,7 +232,7 @@ public:
 				else if (releaseTotes == 1)//lower till it stops
 					releaseTotes = 2;
 			}
-			else if(stick2.GetRawButton(8) && !lowerTote && !liftTote && !releaseTotes && numberOfTotes < 5 && !maxHeight.Get())//Move Upward a Step
+			else if(stick2.GetRawButton(8) && !lowerTote && !liftTote && !releaseTotes && numberOfTotes < 5)//Move Upward a Step
 			{
 				liftTote = true;
 				numberOfTotes++;
@@ -245,22 +258,22 @@ public:
 						distanceToMove = 0;
 						break;
 					case 1:
-						distanceToMove = 1100 + offset;
+						distanceToMove = 1310 + offset;
 						break;
 					case 2:
-						distanceToMove = 2190 + offset;
+						distanceToMove = 3350 + offset;
 						break;
 					case 3:
-						distanceToMove = 3280 + offset;
+						distanceToMove = 5450 + offset;
 						break;
 					case 4:
-						distanceToMove = 4360 + offset;
+						distanceToMove = 7500 + offset;
 						break;
 					case 5:
-						distanceToMove = 4650 + offset; //change to 1.5 inches
+						distanceToMove = 9580 + offset; //change to 1.5 inches
 						break;
-					default:
-						distanceToMove = 1060*numberOfTotes;
+					case 6:
+						distanceToMove = 10250 + offset; //change to 1.5 inches
 						break;
 				}
 			}
@@ -271,13 +284,13 @@ public:
 			{
 				liftTote = false;
 				lowerTote = false;
-				releaseTotes == false;
+				//releaseTotes = 0;
 			}
 			if (releaseTotes == 1 && releaseButton)
 			{
-				liftTalon.Set(-1);
+				liftTalon.Set(-.5);
 				toteToggle = false;
-				if(currentEncoderVal < 4100) //change to trashcan Height
+				if(currentEncoderVal < 8700) //change to trashcan Height
 				{
 					trashToggle = false;
 					releaseButton = false;
@@ -285,7 +298,7 @@ public:
 			}
 			else if(releaseTotes == 2 && releaseButton)
 			{
-				liftTalon.Set(-1);
+				liftTalon.Set(-.5);
 				toteToggle = false;
 				trashToggle = false;
 				if(minHeight.Get())
@@ -297,8 +310,7 @@ public:
 			}
 			else
 			{
-
-				if(!maxHeight.Get() && liftTote && (currentEncoderVal < distanceToMove) )//1060 is the distance of one tote movement, maxheight limits the motion of the lift motor.
+				if(liftTote && (currentEncoderVal < distanceToMove))//1060 is the distance of one tote movement
 				{
 					liftTalon.Set(1);
 					toteToggle = false;
@@ -316,31 +328,34 @@ public:
 					lowerTote = false;
 
 					//manual control of the liftMotor
-					if(!maxHeight.Get() && !minHeight.Get()) //maxHeight is not tiggered move whatever
+					if(!minHeight.Get())
 					{
 						if(stick2.GetRawButton(7)) //motor runs downwards
 						{
 							if(currentEncoderVal > 1000)
-								liftTalon.Set(-1);
-							else
 								liftTalon.Set(-.5);
+							else
+								liftTalon.Set(-.3);
 						}
 						else if(stick2.GetRawButton(6)) //motor runs upwards
 						{
-							liftTalon.Set(1);
+							if(currentEncoderVal > 9500)
+								liftTalon.Set(.5);
+							else
+								liftTalon.Set(.7);
 						}
 						else
 							liftTalon.Set(0);
 					}
-					else if (maxHeight.Get() && stick2.GetRawButton(7)) //maxHeight is triggered so the motor can only run downwards
+					else if (stick2.GetRawButton(7))
 					{
 						if(currentEncoderVal > 1000)
-							liftTalon.Set(-1);
-						else
 							liftTalon.Set(-.5);
+						else
+							liftTalon.Set(-.3);
 					}
 					else if (minHeight.Get() && stick2.GetRawButton(6))
-						liftTalon.Set(1);
+						liftTalon.Set(.5);
 					else
 						liftTalon.Set(0);
 				}
@@ -348,14 +363,31 @@ public:
 			}
 			if(numberOfTotes > 1)
 			{
-				baseMotorValue = .03 * numberOfTotes;
+				baseMotorValue = .06 * numberOfTotes;
 			}
 			else
 			{
 				baseMotorValue = 0.0;
 			}
-			if(liftTalon.Get() <=0.05 && liftTalon.Get() >= -.05 && !maxHeight.Get())
+			if(liftTalon.Get() <=0.05 && liftTalon.Get() >= -.05)
 				liftTalon.Set(baseMotorValue);
+			if(stick3.GetY() > .05 || stick3.GetY() < -.05)
+			{
+				if (stick3.GetY() > 0)
+					liftTalon.Set(stick3.GetY() + baseMotorValue);
+				else
+					liftTalon.Set(stick3.GetY());
+			}
+			//-----------------------------------------------------------------------------------------------------------
+			//TrashTalon Code
+			if(currentEncoderVal < 500)//Change from 1000
+			{
+				garbageTalon.Set(1);
+			}
+			else
+			{
+				garbageTalon.Set(-.6);
+			}
 
 			//-----------------------------------------------------------------------------------------------------------
 			//Limit Switches
@@ -364,7 +396,6 @@ public:
 				liftEncoder.Reset();
 				numberOfTotes = 0;
 			}
-
 			//-----------------------------------------------------------------------------------------------------------
 			//DriveJoystickLEDs
 
@@ -380,12 +411,13 @@ public:
 			trashSolenoid.Set(trashToggle);
 
 			//-----------------------------------------------------------------------------------------------------------
+			DriverStation::ReportError(std::to_string(rangeToWall) + "\n");
 			//SmartDashboardThings
+
 			SmartDashboard::PutNumber("currentEV", (currentEncoderVal));
 			SmartDashboard::PutBoolean ("Lift Tote", liftTote); ///remove
 			SmartDashboard::PutBoolean ("Lower Tote", lowerTote); //remove?
 			SmartDashboard::PutBoolean ("switchMinHeight", minHeight.Get()); //remove
-			SmartDashboard::PutBoolean ("switchMaxHeight", maxHeight.Get()); //remove
 			SmartDashboard::PutNumber("Encoder stuff", (-liftEncoder.Get())*18/25); // 18/25 = 360/500 this converts the encoder count to degrees (360 degrees = 500 count)
 			SmartDashboard::PutNumber("Encoder graph", (-liftEncoder.Get())*18/25); // 18/25 = 360/500 this converts the encoder count to degrees (360 degrees = 500 count)
 			SmartDashboard::PutNumber("Lift Talon", liftTalon.Get());
