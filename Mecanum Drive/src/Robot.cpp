@@ -266,7 +266,7 @@ public:
 						distanceToMove = 3350 + offset;
 						break;
 					case 3:
-						distanceToMove = 5450 + offset;
+						distanceToMove = 5440 + offset;
 						break;
 					case 4:
 						distanceToMove = 7500 + offset;
@@ -302,7 +302,7 @@ public:
 			{
 				liftTalon.Set(-.5);
 				toteToggle = false;
-				trashToggle = false;
+				trashToggle = true;
 				if(minHeight.Get())
 				{
 					releaseButton = false;
@@ -373,13 +373,6 @@ public:
 			}
 			if(liftTalon.Get() <=0.05 && liftTalon.Get() >= -.05)
 				liftTalon.Set(baseMotorValue);
-			if(stick3.GetY() > .05 || stick3.GetY() < -.05)
-			{
-				if (stick3.GetY() > 0)
-					liftTalon.Set(stick3.GetY() + baseMotorValue);
-				else
-					liftTalon.Set(stick3.GetY());
-			}
 			//-----------------------------------------------------------------------------------------------------------
 			//TrashTalon Code
 			if(currentEncoderVal < 500)//Change from 1000
